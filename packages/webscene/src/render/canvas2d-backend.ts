@@ -1,8 +1,10 @@
+import type { AssetRegistry } from '../assets/registry';
 import { registerBuiltInEffects } from '../effects/builtins';
 import { EffectRegistry } from '../effects/registry';
-import type { CameraJSON, CompJSON, EffectInstanceJSON, LayerJSON } from '../core/schema';
-import { degToRad } from '../utils/math';
+import type { CompJSON, EffectInstanceJSON, LayerJSON, ProjectJSON } from '../core/schema';
+import type { PluginHost } from '../plugins/host';
 import { rgbaToCss } from '../utils/color';
+import { degToRad } from '../utils/math';
 import { ObjectPool } from '../utils/object-pool';
 import type { RenderBackend, RenderFrameInfo, RenderStats, RenderTarget } from './backend';
 import { NoiseTextureCache, PathCache, TextLayoutCache } from './cache';
@@ -11,19 +13,13 @@ import { TrackSampler } from './track-sampler';
 
 const MAX_PRECOMP_DEPTH = 4;
 
-interface LayerRenderResult {
-  drawCalls: number;
-  effectCount: number;
-}
-
 interface ProjectionState {
   x: number;
   y: number;
   perspective: number;
 }
 
-interface EffectChainResult {
-  source: HTMLCanvasElement | OffscreenCanvas;
+interface RenderCounters {
   drawCalls: number;
   effectCount: number;
 }
@@ -74,6 +70,11 @@ export class Canvas2DBackend implements RenderBackend {
     },
   });
 
+  private readonly counters: RenderCounters = {
+    drawCalls: 0,
+    effectCount: 0,
+  };
+
   private readonly compEffectLayer: LayerJSON = {
     id: '__comp_effects__',
     type: 'custom:comp-effects',
@@ -91,6 +92,9 @@ export class Canvas2DBackend implements RenderBackend {
     },
     blendMode: 'source-over',
   };
+
+  private lookupProjectRef: ProjectJSON | null = null;
+  private readonly compLookup = new Map<string, CompJSON>();
 
   private layerCanvas: HTMLCanvasElement | OffscreenCanvas;
   private layerCtx: Canvas2DContext;
@@ -116,48 +120,62 @@ export class Canvas2DBackend implements RenderBackend {
 
   public render(frame: RenderFrameInfo, target: RenderTarget): RenderStats {
     this.ensureBuffers(frame.comp.width, frame.comp.height);
-    target.clear();
+    this.ensureCompLookup(frame.project);
 
-    const samplingContext = this.tracks.prepare(frame.comp);
+    this.counters.drawCalls = 0;
+    this.counters.effectCount = 0;
+
     this.clearBuffer(this.compCtx, frame.comp.width, frame.comp.height);
     this.compCtx.fillStyle = rgbaToCss(frame.comp.backgroundColor);
     this.compCtx.fillRect(0, 0, frame.comp.width, frame.comp.height);
+    this.counters.drawCalls += 1;
 
-    let drawCalls = 1;
-    let effectCount = 0;
+    this.renderCompLayers(frame.project, frame.assetRegistry, frame.pluginHost, frame.comp, frame.time, this.compCtx, 0);
 
-    const layers = frame.comp.layers;
-    for (let i = 0; i < layers.length; i += 1) {
-      const sampledLayer = this.tracks.sampleLayer(layers[i], frame.time, samplingContext);
-      if (!layerActiveAt(sampledLayer, frame.time)) {
-        continue;
-      }
+    const compSource = this.applyCompEffects(
+      frame.project,
+      frame.assetRegistry,
+      frame.pluginHost,
+      frame.comp,
+      frame.time,
+      frame.comp.width,
+      frame.comp.height,
+    );
 
-      const result = this.renderLayer(frame, sampledLayer, this.compCtx, frame.time, 0);
-      drawCalls += result.drawCalls;
-      effectCount += result.effectCount;
-    }
-
-    const compEffects = this.applyCompEffects(frame, frame.time);
-    drawCalls += compEffects.drawCalls;
-    effectCount += compEffects.effectCount;
-
+    target.clear();
     const targetCtx = target.getContext2D();
-    targetCtx.drawImage(compEffects.source, 0, 0, frame.comp.width, frame.comp.height);
-    drawCalls += 1;
+    targetCtx.drawImage(compSource, 0, 0, frame.comp.width, frame.comp.height);
+    this.counters.drawCalls += 1;
 
     return {
       frame: frame.frame,
       time: frame.time,
-      drawCalls,
+      drawCalls: this.counters.drawCalls,
       layerCount: frame.comp.layers.length,
-      effectCount,
+      effectCount: this.counters.effectCount,
     };
   }
 
   public dispose(): void {
     this.noise.clear();
     this.tracks.clear();
+  }
+
+  private ensureCompLookup(project: ProjectJSON): void {
+    if (this.lookupProjectRef === project) {
+      return;
+    }
+
+    this.compLookup.clear();
+    for (let i = 0; i < project.comps.length; i += 1) {
+      const comp = project.comps[i];
+      this.compLookup.set(comp.id, comp);
+    }
+    this.lookupProjectRef = project;
+  }
+
+  private resolveComp(compId: string): CompJSON | undefined {
+    return this.compLookup.get(compId);
   }
 
   private ensureBuffers(width: number, height: number): void {
@@ -184,32 +202,28 @@ export class Canvas2DBackend implements RenderBackend {
   }
 
   private applyEffects(
-    frame: RenderFrameInfo,
+    project: ProjectJSON,
+    assets: AssetRegistry,
+    plugins: PluginHost,
+    comp: CompJSON,
+    layer: LayerJSON,
+    time: number,
     effects: EffectInstanceJSON[] | undefined,
     initialSource: HTMLCanvasElement | OffscreenCanvas,
     initialSourceCtx: Canvas2DContext,
     initialSwap: HTMLCanvasElement | OffscreenCanvas,
     initialSwapCtx: Canvas2DContext,
-    layer: LayerJSON,
-    comp: CompJSON,
-    time: number,
     width: number,
     height: number,
-  ): EffectChainResult {
+  ): HTMLCanvasElement | OffscreenCanvas {
     if (!effects || effects.length === 0) {
-      return {
-        source: initialSource,
-        drawCalls: 0,
-        effectCount: 0,
-      };
+      return initialSource;
     }
 
     let source = initialSource;
     let sourceCtx = initialSourceCtx;
     let swap = initialSwap;
     let swapCtx = initialSwapCtx;
-    let drawCalls = 0;
-    let effectCount = 0;
 
     for (let i = 0; i < effects.length; i += 1) {
       const effect = effects[i];
@@ -238,9 +252,9 @@ export class Canvas2DBackend implements RenderBackend {
             sourceCtx,
           });
         } else {
-          const plugin = frame.pluginHost.getEffect(effect.type);
-          if (plugin) {
-            plugin.apply(swapCtx, effect, layer, comp, time);
+          const pluginEffect = plugins.getEffect(effect.type);
+          if (pluginEffect) {
+            pluginEffect.apply(swapCtx, effect, layer, comp, time);
           } else {
             swapCtx.drawImage(source, 0, 0, width, height);
           }
@@ -254,49 +268,51 @@ export class Canvas2DBackend implements RenderBackend {
       source = nextSource;
       sourceCtx = nextSourceCtx;
 
-      drawCalls += 1;
-      effectCount += 1;
+      this.counters.drawCalls += 1;
+      this.counters.effectCount += 1;
     }
 
-    return {
-      source,
-      drawCalls,
-      effectCount,
-    };
+    return source;
   }
 
-  private applyCompEffects(frame: RenderFrameInfo, time: number): EffectChainResult {
-    this.compEffectLayer.duration = frame.comp.duration;
+  private applyCompEffects(
+    project: ProjectJSON,
+    assets: AssetRegistry,
+    plugins: PluginHost,
+    comp: CompJSON,
+    time: number,
+    width: number,
+    height: number,
+  ): HTMLCanvasElement | OffscreenCanvas {
+    this.compEffectLayer.duration = comp.duration;
 
     return this.applyEffects(
-      frame,
-      frame.comp.effects,
+      project,
+      assets,
+      plugins,
+      comp,
+      this.compEffectLayer,
+      time,
+      comp.effects,
       this.compCanvas,
       this.compCtx,
       this.postCanvas,
       this.postCtx,
-      this.compEffectLayer,
-      frame.comp,
-      time,
-      frame.comp.width,
-      frame.comp.height,
+      width,
+      height,
     );
   }
 
-  private projectLayer(
-    comp: CompJSON,
-    layer: LayerJSON,
-    camera: CameraJSON | undefined,
-    out: ProjectionState,
-  ): ProjectionState {
+  private projectLayer(comp: CompJSON, layer: LayerJSON, out: ProjectionState): void {
     const x = layer.transform.position[0];
     const y = layer.transform.position[1];
+    const camera = comp.camera;
 
     if (!camera) {
       out.x = x;
       out.y = y;
       out.perspective = 1;
-      return out;
+      return;
     }
 
     const depth = layer.depth ?? 0;
@@ -310,51 +326,67 @@ export class Canvas2DBackend implements RenderBackend {
     out.x = (x - camera.position[0] - halfW) * perspective + halfW;
     out.y = (y - camera.position[1] - halfH) * perspective + halfH;
     out.perspective = perspective;
-    return out;
+  }
+
+  private renderCompLayers(
+    project: ProjectJSON,
+    assets: AssetRegistry,
+    plugins: PluginHost,
+    comp: CompJSON,
+    time: number,
+    outCtx: Canvas2DContext,
+    depth: number,
+  ): void {
+    const sampling = this.tracks.prepare(comp);
+    const layers = comp.layers;
+
+    for (let i = 0; i < layers.length; i += 1) {
+      const sampledLayer = this.tracks.sampleLayer(layers[i], time, sampling);
+      if (!layerActiveAt(sampledLayer, time)) {
+        continue;
+      }
+
+      this.renderLayer(project, assets, plugins, comp, sampledLayer, time, outCtx, depth);
+    }
   }
 
   private renderLayer(
-    frame: RenderFrameInfo,
+    project: ProjectJSON,
+    assets: AssetRegistry,
+    plugins: PluginHost,
+    comp: CompJSON,
     layer: LayerJSON,
-    outCtx: Canvas2DContext,
     time: number,
+    outCtx: Canvas2DContext,
     depth: number,
-  ): LayerRenderResult {
-    const width = frame.comp.width;
-    const height = frame.comp.height;
+  ): void {
+    const width = comp.width;
+    const height = comp.height;
     const localTime = time - layer.startTime;
 
     this.clearBuffer(this.layerCtx, width, height);
     this.clearBuffer(this.effectCtx, width, height);
 
-    let drawCalls = this.drawLayerContent(frame, layer, localTime, depth);
-    let effectCount = 0;
+    this.drawLayerContent(project, assets, plugins, comp, layer, localTime, depth);
 
-    let sourceCanvas: HTMLCanvasElement | OffscreenCanvas = this.layerCanvas;
-    let sourceCtx: Canvas2DContext = this.layerCtx;
-    let swapCanvas: HTMLCanvasElement | OffscreenCanvas = this.effectCanvas;
-    let swapCtx: Canvas2DContext = this.effectCtx;
-
-    const layerEffects = this.applyEffects(
-      frame,
-      layer.effects,
-      sourceCanvas,
-      sourceCtx,
-      swapCanvas,
-      swapCtx,
+    const source = this.applyEffects(
+      project,
+      assets,
+      plugins,
+      comp,
       layer,
-      frame.comp,
       localTime,
+      layer.effects,
+      this.layerCanvas,
+      this.layerCtx,
+      this.effectCanvas,
+      this.effectCtx,
       width,
       height,
     );
 
-    sourceCanvas = layerEffects.source;
-    drawCalls += layerEffects.drawCalls;
-    effectCount += layerEffects.effectCount;
-
     const projection = this.projections.acquire();
-    this.projectLayer(frame.comp, layer, frame.comp.camera, projection);
+    this.projectLayer(comp, layer, projection);
 
     outCtx.save();
     outCtx.globalCompositeOperation = layer.blendMode;
@@ -365,23 +397,23 @@ export class Canvas2DBackend implements RenderBackend {
     outCtx.rotate(degToRad(rotation));
     outCtx.scale(scale[0] * projection.perspective, scale[1] * projection.perspective);
     outCtx.translate(-anchor[0], -anchor[1]);
-    outCtx.drawImage(sourceCanvas, 0, 0, width, height);
+    outCtx.drawImage(source, 0, 0, width, height);
     outCtx.restore();
 
     this.projections.release(projection);
-
-    drawCalls += 1;
-    return { drawCalls, effectCount };
+    this.counters.drawCalls += 1;
   }
 
   private drawLayerContent(
-    frame: RenderFrameInfo,
+    project: ProjectJSON,
+    assets: AssetRegistry,
+    plugins: PluginHost,
+    comp: CompJSON,
     layer: LayerJSON,
     localTime: number,
     depth: number,
-  ): number {
+  ): void {
     const ctx = this.layerCtx;
-    let drawCalls = 0;
 
     if (layer.masks && layer.masks.length > 0) {
       ctx.save();
@@ -401,13 +433,13 @@ export class Canvas2DBackend implements RenderBackend {
 
     if (layer.type === 'solid') {
       ctx.fillStyle = rgbaToCss(layer.color);
-      ctx.fillRect(0, 0, frame.comp.width, frame.comp.height);
-      drawCalls += 1;
+      ctx.fillRect(0, 0, comp.width, comp.height);
+      this.counters.drawCalls += 1;
     } else if (layer.type === 'rect') {
       ctx.fillStyle = rgbaToCss(layer.color);
       const path = this.paths.roundedRect(layer.width, layer.height, layer.cornerRadius ?? 0);
       ctx.fill(path);
-      drawCalls += 1;
+      this.counters.drawCalls += 1;
     } else if (layer.type === 'text') {
       const fontWeight = layer.fontWeight ?? '400';
       const lineHeight = layer.lineHeight ?? layer.fontSize * 1.2;
@@ -421,52 +453,31 @@ export class Canvas2DBackend implements RenderBackend {
       for (let i = 0; i < layout.lines.length; i += 1) {
         const line = layout.lines[i];
         ctx.fillText(line, 0, i * lineHeight, layer.maxWidth);
-        drawCalls += 1;
+        this.counters.drawCalls += 1;
       }
     } else if (layer.type === 'image') {
-      const loaded = frame.assetRegistry.get<ImageBitmap>(layer.assetId);
+      const loaded = assets.get<ImageBitmap>(layer.assetId);
       if (loaded?.data) {
         ctx.drawImage(loaded.data, 0, 0, layer.width, layer.height);
-        drawCalls += 1;
+        this.counters.drawCalls += 1;
       }
     } else if (layer.type === 'precomp') {
       if (depth < MAX_PRECOMP_DEPTH) {
-        const precomp = frame.project.comps.find((candidate) => candidate.id === layer.compId);
+        const precomp = this.resolveComp(layer.compId);
         if (precomp) {
-          this.clearBuffer(this.postCtx, precomp.width, precomp.height);
+          this.clearBuffer(this.postCtx, comp.width, comp.height);
           const nestedTime = (localTime + (layer.timeOffset ?? 0)) * (layer.timeScale ?? 1);
-          const nestedSampling = this.tracks.prepare(precomp);
-
-          for (let i = 0; i < precomp.layers.length; i += 1) {
-            const nestedLayer = this.tracks.sampleLayer(precomp.layers[i], nestedTime, nestedSampling);
-            if (!layerActiveAt(nestedLayer, nestedTime)) {
-              continue;
-            }
-
-            const nestedResult = this.renderLayer(
-              {
-                ...frame,
-                comp: precomp,
-              },
-              nestedLayer,
-              this.postCtx,
-              nestedTime,
-              depth + 1,
-            );
-
-            drawCalls += nestedResult.drawCalls;
-          }
-
+          this.renderCompLayers(project, assets, plugins, precomp, nestedTime, this.postCtx, depth + 1);
           ctx.drawImage(this.postCanvas, 0, 0, precomp.width, precomp.height);
-          drawCalls += 1;
+          this.counters.drawCalls += 1;
         }
       }
     } else {
-      const plugin = frame.pluginHost.getLayer(layer.type);
-      if (plugin) {
-        const didRender = plugin.render(ctx, layer, frame.comp, localTime);
+      const pluginLayer = plugins.getLayer(layer.type);
+      if (pluginLayer) {
+        const didRender = pluginLayer.render(ctx, layer, comp, localTime);
         if (didRender) {
-          drawCalls += 1;
+          this.counters.drawCalls += 1;
         }
       }
     }
@@ -474,7 +485,5 @@ export class Canvas2DBackend implements RenderBackend {
     if (layer.masks && layer.masks.length > 0) {
       ctx.restore();
     }
-
-    return drawCalls;
   }
 }

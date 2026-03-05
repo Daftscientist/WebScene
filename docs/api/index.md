@@ -58,6 +58,7 @@
 - `exportFrames`
 - `createZipArchiveBuilder` / `ZipArchiveBuilder`
 - `exportVideoWebCodecs` (experimental)
+- `exportVideoWebM` (experimental)
 - `downloadBlob`
 
 See TypeScript declarations in `packages/webscene/dist/index.d.ts` for full signatures.

@@ -44,6 +44,7 @@ export { createPlayerControls } from './player/controls';
 export { exportFrames, downloadBlob } from './export/frames';
 export { ZipArchiveBuilder, createZipArchiveBuilder } from './export/zip-archive';
 export { exportVideoWebCodecs } from './export/webcodecs';
+export { exportVideoWebM } from './export/webcodecs-webm';
 
 export type {
   ProjectJSON,
@@ -69,6 +70,7 @@ export type { AudioTimeline, AudioClip } from './audio/types';
 export type { ExportFramesOptions, ExportFramesResult, FrameArchiveBuilder } from './export/frames';
 export type { ZipArchiveBuilderOptions } from './export/zip-archive';
 export type { WebCodecsExportOptions, WebCodecsExportResult } from './export/webcodecs';
+export type { WebMWebCodecsExportOptions, WebMWebCodecsExportResult } from './export/webcodecs-webm';
 export type { Vec2, Vec3, RGBA, ID } from './utils/types';
 
 export const WEBSCENE_VERSION = '0.1.0';

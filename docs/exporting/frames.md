@@ -42,6 +42,24 @@ Limitations:
 - Requires a muxer integration for production delivery.
 - Browser support varies.
 
+## Experimental WebM muxed output
+
+`exportVideoWebM` uses WebCodecs + `webm-muxer` to produce a WebM `Blob`.
+
+```ts
+const webm = await exportVideoWebM({
+  engine,
+  canvas,
+  experimental: true,
+});
+```
+
+Constraints:
+
+- Depends on browser WebCodecs support.
+- Codec support is platform-dependent.
+- Intended for v1.5 experimentation, not guaranteed production parity across browsers.
+
 ## Server-side guide
 
 For stable production encoding:

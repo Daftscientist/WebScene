@@ -12,6 +12,7 @@
     "typecheck": "npm run -w webscene typecheck",
     "lint": "eslint .",
     "test": "npm run -w webscene test",
+    "perf": "npm run -w webscene perf",
     "test:watch": "npm run -w webscene test:watch",
     "dev:examples": "vite examples",
     "build:examples": "vite build examples"

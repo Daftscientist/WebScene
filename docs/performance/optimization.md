@@ -20,3 +20,4 @@
 - Use browser performance tools and inspect long tasks.
 - Track draw call count from `RenderStats`.
 - Measure export throughput with and without effects.
+- Run `npm run perf` to enforce baseline track evaluation budgets used by CI.

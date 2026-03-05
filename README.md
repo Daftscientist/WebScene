@@ -110,6 +110,20 @@ console.log(result.manifest.frames.length);
 
 `manifest.json` includes fps, dimensions, frame names, and timestamps.
 
+## Experimental WebM Export (WebCodecs)
+
+```ts
+import { exportVideoWebM } from 'webscene';
+
+const result = await exportVideoWebM({
+  engine,
+  canvas,
+  experimental: true,
+});
+```
+
+This path uses WebCodecs + `webm-muxer` and is intentionally marked experimental.
+
 ### ffmpeg recipes
 
 Frames + audio to MP4:
