@@ -1,3 +1,61 @@
-# API Reference
+# API Reference (v1)
 
-Draft API index.
+## Core
+
+- `Project`
+- `Comp`
+- `Layer`
+- `Track`
+- `Engine`
+- `createEngine`
+- `createPatch`
+- `serializeProject` / `deserializeProject`
+
+## Layer factories
+
+- `createSolidLayer`
+- `createRectLayer`
+- `createTextLayer`
+- `createImageLayer`
+- `createPrecompLayer`
+
+## Animation
+
+- `KeyframeTrack`
+- `easing`
+- `registerInterpolator`
+- `WiggleBehavior`
+- `SpringBehavior`
+
+## Rendering
+
+- `Canvas2DBackend`
+- `CanvasRenderTarget`
+- `createOffscreenTarget`
+
+## Effects
+
+- `EffectRegistry`
+- `registerBuiltInEffects`
+
+## Assets
+
+- `AssetRegistry`
+- `ImageAssetLoader`
+- `AudioAssetLoader`
+- `JsonAssetLoader`
+- `demoAssetLibrary`
+
+## Player / Audio
+
+- `Player`
+- `createPlayerControls` (reference UI)
+- `AudioMixer`
+
+## Export
+
+- `exportFrames`
+- `exportVideoWebCodecs` (experimental)
+- `downloadBlob`
+
+See TypeScript declarations in `packages/webscene/dist/index.d.ts` for full signatures.
