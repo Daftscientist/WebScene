@@ -1,0 +1,30 @@
+{
+  "name": "webscene-repo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "WebScene monorepo",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run -w webscene build",
+    "build:browser": "npm run -w webscene build:browser",
+    "typecheck": "npm run -w webscene typecheck",
+    "lint": "eslint .",
+    "test": "npm run -w webscene test",
+    "test:watch": "npm run -w webscene test:watch",
+    "dev:examples": "vite examples",
+    "build:examples": "vite build examples"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@types/node": "^22.13.10",
+    "@typescript-eslint/eslint-plugin": "^8.26.1",
+    "@typescript-eslint/parser": "^8.26.1",
+    "eslint": "^9.22.0",
+    "eslint-config-prettier": "^10.1.1",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2"
+  }
+}
