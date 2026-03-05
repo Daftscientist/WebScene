@@ -28,6 +28,7 @@ const createRootComp = (id: string, options: CreateProjectOptions): CompJSON => 
   backgroundColor: [0, 0, 0, 1],
   layers: [],
   tracks: [],
+  effects: [],
   markers: [],
 });
 

@@ -4,6 +4,7 @@ export { Comp } from './core/comp';
 export { Layer } from './core/layer';
 export { Track } from './core/track';
 export { createEngine } from './core/create-engine';
+export { createCamera } from './core/camera';
 export { createIdGenerator, makeStableId } from './core/ids';
 export { createPatch, valueAtPath } from './core/state-patch';
 export {
@@ -41,6 +42,7 @@ export { Player } from './player/player';
 export { createPlayerControls } from './player/controls';
 
 export { exportFrames, downloadBlob } from './export/frames';
+export { ZipArchiveBuilder, createZipArchiveBuilder } from './export/zip-archive';
 export { exportVideoWebCodecs } from './export/webcodecs';
 
 export type {
@@ -65,6 +67,7 @@ export type { Keyframe } from './animation/keyframe-track';
 export type { EnginePlugin, LayerPlugin, EffectPlugin, ImporterPlugin } from './plugins/types';
 export type { AudioTimeline, AudioClip } from './audio/types';
 export type { ExportFramesOptions, ExportFramesResult, FrameArchiveBuilder } from './export/frames';
+export type { ZipArchiveBuilderOptions } from './export/zip-archive';
 export type { WebCodecsExportOptions, WebCodecsExportResult } from './export/webcodecs';
 export type { Vec2, Vec3, RGBA, ID } from './utils/types';
 

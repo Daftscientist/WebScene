@@ -5,6 +5,7 @@ import {
   Player,
   Project,
   createPlayerControls,
+  createCamera,
   createRectLayer,
   createSolidLayer,
   createTextLayer,
@@ -14,6 +15,8 @@ import {
 const project = Project.create({ width: 1280, height: 720, fps: 30, duration: 10 }).toJSON();
 const comp = project.comps[0];
 project.assets.push(...demoAssetLibrary);
+comp.camera = createCamera('main-camera', 0, 0, 0, 1200);
+comp.effects = [{ id: 'comp-vignette', type: 'vignette', enabled: true, params: { strength: 0.18 } }];
 
 const bg = createSolidLayer({ id: 'bg', name: 'bg', duration: 10, color: [8, 10, 15, 1] });
 bg.effects = [{ id: 'grain', type: 'grain', enabled: true, params: { strength: 0.06 } }];
@@ -28,6 +31,7 @@ const band = createRectLayer({
   cornerRadius: 36,
 });
 band.transform.position = [160, 220];
+band.depth = 300;
 band.effects = [
   { id: 'band-shadow', type: 'dropShadow', enabled: true, params: { blur: 22, offsetX: 0, offsetY: 14, color: [0, 0, 0, 0.42] } },
   { id: 'band-glow', type: 'glow', enabled: true, params: { radius: 15, intensity: 0.2, color: [115, 150, 255, 0.7] } },
@@ -43,6 +47,7 @@ const title = createTextLayer({
   color: [242, 247, 255, 1],
 });
 title.transform.position = [200, 300];
+title.depth = -120;
 
 const sub = createTextLayer({
   id: 'sub',
@@ -54,6 +59,7 @@ const sub = createTextLayer({
   color: [150, 180, 255, 1],
 });
 sub.transform.position = [205, 388];
+sub.depth = 120;
 
 comp.layers.push(bg, band, title, sub);
 comp.tracks?.push(
@@ -91,6 +97,13 @@ const player = new Player(engine, { loop: true });
 createPlayerControls(document.getElementById('controls') as HTMLElement, player, {
   fps: 30,
   duration: 10,
+});
+
+player.on('tick', ({ time }) => {
+  if (comp.camera) {
+    comp.camera.position[0] = Math.sin(time * 0.75) * 70;
+    comp.camera.position[1] = Math.cos(time * 0.45) * 18;
+  }
 });
 
 player.play();

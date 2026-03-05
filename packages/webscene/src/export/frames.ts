@@ -16,7 +16,7 @@ export interface FrameManifest {
 }
 
 export interface FrameArchiveBuilder {
-  addFile(name: string, data: Blob | string): void;
+  addFile(name: string, data: Blob | string): Promise<void> | void;
   finalize(): Promise<Blob>;
 }
 
@@ -88,7 +88,7 @@ export const exportFrames = async (options: ExportFramesOptions): Promise<Export
     manifestFrames.push({ frame, timestamp: time, filename });
 
     if (options.archiveBuilder) {
-      options.archiveBuilder.addFile(filename, blob);
+      await options.archiveBuilder.addFile(filename, blob);
     }
   }
 
@@ -101,15 +101,20 @@ export const exportFrames = async (options: ExportFramesOptions): Promise<Export
   };
 
   if (options.archiveBuilder) {
-    options.archiveBuilder.addFile('manifest.json', JSON.stringify(manifest, null, 2));
+    await options.archiveBuilder.addFile('manifest.json', JSON.stringify(manifest, null, 2));
   }
 
   const archive = options.archiveBuilder ? await options.archiveBuilder.finalize() : undefined;
-
+  if (archive) {
+    return {
+      manifest,
+      files,
+      archive,
+    };
+  }
   return {
     manifest,
     files,
-    archive,
   };
 };
 

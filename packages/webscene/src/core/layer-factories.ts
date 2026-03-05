@@ -22,6 +22,7 @@ export interface LayerBaseCreateOptions {
   name: string;
   startTime?: number;
   duration: number;
+  depth?: number;
 }
 
 const createBase = (options: LayerBaseCreateOptions): LayerBaseJSON => ({
@@ -31,6 +32,7 @@ const createBase = (options: LayerBaseCreateOptions): LayerBaseJSON => ({
   startTime: options.startTime ?? 0,
   duration: options.duration,
   enabled: true,
+  depth: options.depth ?? 0,
   transform: defaultTransform(),
   blendMode: 'source-over',
 });

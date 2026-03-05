@@ -18,7 +18,19 @@ Manifest fields:
 
 ## ZIP output
 
-ZIP is intentionally pluggable via `FrameArchiveBuilder` to avoid heavy default dependencies.
+ZIP output is available through an optional builder:
+
+```ts
+import { exportFrames, createZipArchiveBuilder } from 'webscene';
+
+const result = await exportFrames({
+  engine,
+  canvas,
+  archiveBuilder: createZipArchiveBuilder(),
+});
+```
+
+`FrameArchiveBuilder` remains public for custom archive implementations.
 
 ## Experimental WebCodecs (v1.5)
 

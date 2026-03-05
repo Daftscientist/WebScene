@@ -53,6 +53,7 @@ export interface LayerBaseJSON {
   startTime: number;
   duration: number;
   enabled: boolean;
+  depth?: number;
   transform: TransformJSON;
   blendMode: BlendMode;
   masks?: MaskJSON[];
@@ -128,6 +129,7 @@ export interface CompJSON {
   backgroundColor: RGBA;
   layers: LayerJSON[];
   tracks?: TrackJSON<unknown>[];
+  effects?: EffectInstanceJSON[];
   camera?: CameraJSON;
   markers?: MarkerJSON[];
 }

@@ -35,7 +35,14 @@ Attach `TrackJSON` to `comp.tracks`, then bind it from a layer via `layer.tracks
 
 Example binding path: `transform.position.0`.
 
-## 5) Optional playback controls
+## 5) Optional camera + comp effects
+
+```ts
+comp.camera = createCamera('cam-main', 0, 0, 0, 1200);
+comp.effects = [{ id: 'vignette', type: 'vignette', enabled: true, params: { strength: 0.2 } }];
+```
+
+## 6) Optional playback controls
 
 ```ts
 const player = new Player(engine, { loop: true });

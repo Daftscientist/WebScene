@@ -3,6 +3,17 @@ import type { TrackValueKind } from '../animation/interpolators';
 import { Track } from '../core/track';
 import type { BehaviorJSON, CompJSON, LayerJSON, TrackJSON } from '../core/schema';
 
+interface CompSamplingCache {
+  tracksRef: TrackJSON<unknown>[] | undefined;
+  trackMap: Map<string, Track<unknown>>;
+  layerMap: Map<string, LayerJSON>;
+}
+
+export interface SamplingContext {
+  trackMap: Map<string, Track<unknown>>;
+  layerMap: Map<string, LayerJSON>;
+}
+
 const setByPath = (target: Record<string, unknown>, path: string, value: unknown): void => {
   const keys = path.split('.');
   let cursor: unknown = target;
@@ -31,21 +42,6 @@ const setByPath = (target: Record<string, unknown>, path: string, value: unknown
   (cursor as Record<string, unknown>)[leaf] = value;
 };
 
-const cloneLayerForSampling = (layer: LayerJSON): LayerJSON => {
-  const transform = {
-    position: [layer.transform.position[0], layer.transform.position[1]] as const,
-    scale: [layer.transform.scale[0], layer.transform.scale[1]] as const,
-    rotation: layer.transform.rotation,
-    anchor: [layer.transform.anchor[0], layer.transform.anchor[1]] as const,
-    opacity: layer.transform.opacity,
-  };
-
-  return {
-    ...layer,
-    transform,
-  } as LayerJSON;
-};
-
 const applyBehavior = (value: unknown, behavior: BehaviorJSON | undefined, time: number): unknown => {
   if (!behavior || typeof value !== 'number') {
     return value;
@@ -72,33 +68,141 @@ const applyBehavior = (value: unknown, behavior: BehaviorJSON | undefined, time:
   return value;
 };
 
-export class TrackSampler {
-  public createTrackMap(comp: CompJSON): Map<string, Track<unknown>> {
-    const map = new Map<string, Track<unknown>>();
-    const tracks: TrackJSON<unknown>[] = comp.tracks ?? [];
+const copyLayerBase = (target: LayerJSON, source: LayerJSON): void => {
+  target.name = source.name;
+  target.enabled = source.enabled;
+  target.startTime = source.startTime;
+  target.duration = source.duration;
+  target.depth = source.depth;
+  target.blendMode = source.blendMode;
+  target.masks = source.masks;
+  target.effects = source.effects;
+  target.tracks = source.tracks;
 
-    for (let i = 0; i < tracks.length; i += 1) {
-      const trackJson = tracks[i];
-      const track = new Track<unknown>({
-        ...trackJson,
-        valueType: trackJson.valueType as TrackValueKind,
-      });
-      map.set(trackJson.id, track);
-    }
+  const targetPosition = target.transform.position as unknown as [number, number];
+  const targetScale = target.transform.scale as unknown as [number, number];
+  const targetAnchor = target.transform.anchor as unknown as [number, number];
 
-    return map;
+  targetPosition[0] = source.transform.position[0];
+  targetPosition[1] = source.transform.position[1];
+  targetScale[0] = source.transform.scale[0];
+  targetScale[1] = source.transform.scale[1];
+  targetAnchor[0] = source.transform.anchor[0];
+  targetAnchor[1] = source.transform.anchor[1];
+  target.transform.rotation = source.transform.rotation;
+  target.transform.opacity = source.transform.opacity;
+};
+
+const copyLayerTypeData = (target: LayerJSON, source: LayerJSON): void => {
+  if (source.type === 'solid' && target.type === 'solid') {
+    const color = target.color as unknown as [number, number, number, number];
+    color[0] = source.color[0];
+    color[1] = source.color[1];
+    color[2] = source.color[2];
+    color[3] = source.color[3];
+    return;
   }
 
-  public sampleLayer(layer: LayerJSON, time: number, trackMap: Map<string, Track<unknown>>): LayerJSON {
+  if (source.type === 'rect' && target.type === 'rect') {
+    target.width = source.width;
+    target.height = source.height;
+    target.cornerRadius = source.cornerRadius;
+    const color = target.color as unknown as [number, number, number, number];
+    color[0] = source.color[0];
+    color[1] = source.color[1];
+    color[2] = source.color[2];
+    color[3] = source.color[3];
+    return;
+  }
+
+  if (source.type === 'text' && target.type === 'text') {
+    target.text = source.text;
+    target.fontSize = source.fontSize;
+    target.fontFamily = source.fontFamily;
+    target.fontWeight = source.fontWeight;
+    target.lineHeight = source.lineHeight;
+    target.maxWidth = source.maxWidth;
+    target.align = source.align;
+    const color = target.color as unknown as [number, number, number, number];
+    color[0] = source.color[0];
+    color[1] = source.color[1];
+    color[2] = source.color[2];
+    color[3] = source.color[3];
+    return;
+  }
+
+  if (source.type === 'image' && target.type === 'image') {
+    target.assetId = source.assetId;
+    target.width = source.width;
+    target.height = source.height;
+    return;
+  }
+
+  if (source.type === 'precomp' && target.type === 'precomp') {
+    target.compId = source.compId;
+    target.timeOffset = source.timeOffset;
+    target.timeScale = source.timeScale;
+    return;
+  }
+
+  Object.assign(target as Record<string, unknown>, source as Record<string, unknown>);
+};
+
+const syncSampledLayer = (target: LayerJSON, source: LayerJSON): void => {
+  copyLayerBase(target, source);
+  copyLayerTypeData(target, source);
+};
+
+export class TrackSampler {
+  private readonly compCache = new Map<string, CompSamplingCache>();
+
+  public prepare(comp: CompJSON): SamplingContext {
+    let cache = this.compCache.get(comp.id);
+    if (!cache) {
+      cache = {
+        tracksRef: undefined,
+        trackMap: new Map<string, Track<unknown>>(),
+        layerMap: new Map<string, LayerJSON>(),
+      };
+      this.compCache.set(comp.id, cache);
+    }
+
+    if (cache.tracksRef !== comp.tracks) {
+      cache.trackMap.clear();
+      const tracks: TrackJSON<unknown>[] = comp.tracks ?? [];
+      for (let i = 0; i < tracks.length; i += 1) {
+        const trackJson = tracks[i];
+        const track = new Track<unknown>({
+          ...trackJson,
+          valueType: trackJson.valueType as TrackValueKind,
+        });
+        cache.trackMap.set(trackJson.id, track);
+      }
+      cache.tracksRef = comp.tracks;
+    }
+
+    return {
+      trackMap: cache.trackMap,
+      layerMap: cache.layerMap,
+    };
+  }
+
+  public sampleLayer(layer: LayerJSON, time: number, context: SamplingContext): LayerJSON {
     if (!layer.tracks || layer.tracks.length === 0) {
       return layer;
     }
 
-    const sampled = cloneLayerForSampling(layer);
+    let sampled = context.layerMap.get(layer.id);
+    if (!sampled || sampled.type !== layer.type) {
+      sampled = structuredClone(layer);
+      context.layerMap.set(layer.id, sampled);
+    } else {
+      syncSampledLayer(sampled, layer);
+    }
 
     for (let i = 0; i < layer.tracks.length; i += 1) {
       const binding = layer.tracks[i];
-      const track = trackMap.get(binding.trackId);
+      const track = context.trackMap.get(binding.trackId);
       if (!track) {
         continue;
       }
@@ -109,5 +213,9 @@ export class TrackSampler {
     }
 
     return sampled;
+  }
+
+  public clear(): void {
+    this.compCache.clear();
   }
 }

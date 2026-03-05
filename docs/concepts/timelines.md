@@ -16,10 +16,16 @@ Layers render in array order (first = back, last = front).
 Common layer fields:
 
 - `transform`: position, scale, rotation, anchor, opacity
+- `depth`: optional pseudo-3D depth for camera parallax
 - `blendMode`
 - `masks`
 - `effects`
 - `tracks` property bindings
+
+## Camera and pseudo-3D
+
+`Comp.camera` supports a simple perspective model (`position` + `zoom`).  
+When layers include `depth`, camera motion creates parallax and perspective scaling.
 
 ## Track value kinds
 

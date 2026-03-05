@@ -8,6 +8,7 @@
 - `Track`
 - `Engine`
 - `createEngine`
+- `createCamera`
 - `createPatch`
 - `serializeProject` / `deserializeProject`
 
@@ -55,6 +56,7 @@
 ## Export
 
 - `exportFrames`
+- `createZipArchiveBuilder` / `ZipArchiveBuilder`
 - `exportVideoWebCodecs` (experimental)
 - `downloadBlob`
 

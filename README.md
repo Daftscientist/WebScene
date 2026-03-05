@@ -92,8 +92,8 @@ engine.renderAt(0);
 ## Concepts Glossary
 
 - `Project`: root config, comps, assets, global markers, revision.
-- `Comp`: timeline container with layer stack and optional camera.
-- `Layer`: render unit (solid, rect, text, image, precomp, custom plugin).
+- `Comp`: timeline container with layer stack, optional camera, and comp-level effects.
+- `Layer`: render unit (solid, rect, text, image, precomp, custom plugin) with optional `depth` for pseudo-3D parallax.
 - `Track`: keyframed value stream bound to layer properties.
 - `StatePatch`: set/insert/remove operation for undo/redo-ready workflows.
 
@@ -124,13 +124,26 @@ Frames to WebM:
 ffmpeg -framerate 30 -i frame_%05d.webp -c:v libvpx-vp9 -pix_fmt yuv420p output.webm
 ```
 
+### ZIP archive plugin (optional)
+
+```ts
+import { exportFrames, createZipArchiveBuilder } from 'webscene';
+
+const result = await exportFrames({
+  engine,
+  canvas,
+  archiveBuilder: createZipArchiveBuilder(),
+});
+```
+
 ## Performance Tips
 
 - Reuse engine instances; avoid rebuilding project graph every frame.
 - Keep effects stacks minimal on high-res comps.
-- Prefer tracks over per-frame object reconstruction.
+- Prefer tracks over manual per-frame object reconstruction.
 - Use precomps for repeated structures.
 - Preload assets through `AssetRegistry.preload`.
+- Use camera depth/parallax intentionally; large depth ranges increase overdraw pressure.
 
 ## Build Tooling Choice
 
