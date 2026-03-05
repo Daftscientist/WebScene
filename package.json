@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run -w webscene build",
+    "build": "npm run -w webscene build:all",
     "build:browser": "npm run -w webscene build:browser",
     "typecheck": "npm run -w webscene typecheck",
     "lint": "eslint .",

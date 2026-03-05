@@ -23,6 +23,7 @@ export { CanvasRenderTarget, createOffscreenTarget } from './render/target';
 
 export { AssetRegistry } from './assets/registry';
 export { defaultAssetLoaders, ImageAssetLoader, AudioAssetLoader, JsonAssetLoader } from './assets/loaders';
+export { demoAssetLibrary } from './assets/library';
 
 export { easing, resolveEasing } from './animation/easing';
 export { registerInterpolator, getInterpolator } from './animation/interpolators';
